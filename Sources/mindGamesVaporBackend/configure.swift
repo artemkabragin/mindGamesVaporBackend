@@ -27,7 +27,7 @@ public func configure(_ app: Application) async throws {
     
     
     app.migrations.add(CreateCardFlipAttempts())
-    app.migrations.add(CreateColorMatchAttempts())
+    app.migrations.add(AddDateChangedToUserAchievements())
     
 
     try await app.autoMigrate().get()

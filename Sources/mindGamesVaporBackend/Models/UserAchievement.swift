@@ -19,6 +19,9 @@ final class UserAchievement: Model, Content, @unchecked Sendable {
     @Field(key: "progress")
     var progress: Double
     
+    @Field(key: "date_changed")
+    var dateChanged: Date
+    
     @OptionalField(key: "date_unlocked")
     var dateUnlocked: Date?
 
@@ -30,6 +33,7 @@ final class UserAchievement: Model, Content, @unchecked Sendable {
         achievementID: UUID,
         isUnlocked: Bool = false,
         progress: Double = 0.0,
+        dateChanged: Date,
         dateUnlocked: Date? = nil
     ) {
         self.id = id
@@ -37,6 +41,7 @@ final class UserAchievement: Model, Content, @unchecked Sendable {
         self.$achievement.id = achievementID
         self.isUnlocked = isUnlocked
         self.progress = progress
+        self.dateChanged = dateChanged
         self.dateUnlocked = dateUnlocked
     }
 }

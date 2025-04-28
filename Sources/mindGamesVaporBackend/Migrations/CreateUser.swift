@@ -78,6 +78,22 @@ struct CreateUserAchievement: Migration {
 import Fluent
 import Vapor
 
+
+
+struct AddDateChangedToUserAchievements: Migration {
+    func prepare(on database: any Database) -> EventLoopFuture<Void> {
+       database.schema("user_achievements")
+            .field("date_changed", .datetime)
+            .update()
+    }
+
+    func revert(on database: any Database) -> EventLoopFuture<Void> {
+        database.schema("user_achievements")
+            .deleteField("date_changed")
+            .update()
+    }
+}
+
 //struct SeedAchievements1: Migration {
 //    func prepare(on database: any Database) -> EventLoopFuture<Void> {
 //        let achievements: [Achievement] = [
