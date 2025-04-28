@@ -41,8 +41,8 @@ struct UserController: RouteCollection {
         
         return initialAverage
     }
-    
-    func submitGameAttempt(req: Request) async throws -> HTTPStatus {
+
+    func submitGameAttempt(req: Request) async throws -> [AchievementWithProgress] {
         let data = try req.content.decode(GameAttemptData.self)
         let user = try await userFromToken(req)
         
@@ -88,7 +88,29 @@ struct UserController: RouteCollection {
             try await reactionAttempt.save(on: req.db)
         }
         
-        return .ok
+        let userAchievements = try await AchievementService.checkAchievements(
+            for: user,
+            attempt: data,
+            db: req.db
+        )
+
+        let achievementIds = userAchievements.compactMap { $0.id }
+
+        let userAchievementsFromDb = try await UserAchievement.query(on: req.db)
+            .filter(\.$id ~~ achievementIds)
+            .with(\.$achievement)
+            .all()
+        
+        let achivementsDTO = userAchievementsFromDb.map { userAchivement in
+            AchievementWithProgress(
+                achievement: userAchivement.achievement,
+                isUnlocked: userAchivement.isUnlocked,
+                progress: userAchivement.progress,
+                dateUnlocked: userAchivement.dateUnlocked
+            )
+        }
+        
+        return achivementsDTO
     }
     
     func getProgress(req: Request) async throws -> ProgressResponse {
