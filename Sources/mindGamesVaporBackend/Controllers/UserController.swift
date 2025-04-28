@@ -12,37 +12,81 @@ struct UserController: RouteCollection {
     
     func submitOnboarding(req: Request) async throws -> Double {
         let data = try req.content.decode(OnboardingData.self)
-        let initialAverage = data.attempts.reduce(0, +) / Double(data.attempts.count)
-
         let user = try await userFromToken(req)
-
-        let reactionAttempt = ReactionAttempts(
-            initialAverage: initialAverage,
-            userID: try user.requireID()
-        )
-
-        try await reactionAttempt.save(on: req.db)
-
+        let initialAverage = data.attempts.reduce(0, +) / Double(data.attempts.count)
+        
+        switch data.gameType {
+        case .cardFlip:
+            let cardFlipAttempt = CardFlipAttempts(
+                initialAverage: initialAverage,
+                currentAverage: initialAverage,
+                userID: try user.requireID()
+            )
+            try await cardFlipAttempt.save(on: req.db)
+        case .colorMatch:
+            let colorMatchAttempt = ColorMatchAttempts(
+                initialAverage: initialAverage,
+                currentAverage: initialAverage,
+                userID: try user.requireID()
+            )
+            try await colorMatchAttempt.save(on: req.db)
+        case .reaction:
+            let reactionAttempt = ReactionAttempts(
+                initialAverage: initialAverage,
+                currentAverage: initialAverage,
+                userID: try user.requireID()
+            )
+            try await reactionAttempt.save(on: req.db)
+        }
+        
         return initialAverage
     }
     
     func submitGameAttempt(req: Request) async throws -> HTTPStatus {
         let data = try req.content.decode(GameAttemptData.self)
-        
         let user = try await userFromToken(req)
         
-        guard let reactionAttempt = try await ReactionAttempts.query(on: req.db)
-            .filter(\.$user.$id == user.requireID())
-            .first()
-        else {
-            throw Abort(.notFound, reason: "Reaction attempts not found for user")
+        switch data.gameType {
+        case .cardFlip:
+            guard let cardFlipAttempt = try await CardFlipAttempts.query(on: req.db)
+                .filter(\.$user.$id == user.requireID())
+                .first()
+            else {
+                throw Abort(.notFound, reason: "Card flip attempts not found for user")
+            }
+            
+            cardFlipAttempt.attempts.append(data.attempt)
+            
+            cardFlipAttempt.currentAverage = cardFlipAttempt.attempts.reduce(0, +) / Double(cardFlipAttempt.attempts.count)
+            
+            try await cardFlipAttempt.save(on: req.db)
+        case .colorMatch:
+            guard let colorMatchAttempt = try await ColorMatchAttempts.query(on: req.db)
+                .filter(\.$user.$id == user.requireID())
+                .first()
+            else {
+                throw Abort(.notFound, reason: "Card flip attempts not found for user")
+            }
+            
+            colorMatchAttempt.attempts.append(data.attempt)
+            
+            colorMatchAttempt.currentAverage = colorMatchAttempt.attempts.reduce(0, +) / Double(colorMatchAttempt.attempts.count)
+            
+            try await colorMatchAttempt.save(on: req.db)
+        case .reaction:
+            guard let reactionAttempt = try await ReactionAttempts.query(on: req.db)
+                .filter(\.$user.$id == user.requireID())
+                .first()
+            else {
+                throw Abort(.notFound, reason: "Reaction attempts not found for user")
+            }
+            
+            reactionAttempt.attempts.append(data.attempt)
+            
+            reactionAttempt.currentAverage = reactionAttempt.attempts.reduce(0, +) / Double(reactionAttempt.attempts.count)
+            
+            try await reactionAttempt.save(on: req.db)
         }
-        
-        reactionAttempt.attempts.append(data.attempt)
-        
-        reactionAttempt.currentAverage = reactionAttempt.attempts.reduce(0, +) / Double(reactionAttempt.attempts.count)
-        
-        try await reactionAttempt.save(on: req.db)
         
         return .ok
     }
@@ -64,7 +108,10 @@ struct UserController: RouteCollection {
             }
             let initialAverage = reactionAttempt.initialAverage
             let currentAverage = reactionAttempt.currentAverage
-            progress = ((initialAverage - currentAverage) / initialAverage) * 100
+            let convertedInitialValue = 100 / initialAverage
+            let convertedCurrentValue = 100 / currentAverage
+            
+            progress = ((convertedCurrentValue - convertedInitialValue) / convertedInitialValue) * 100
         case .cardFlip:
             guard let cardFlipAttempt = try await CardFlipAttempts.query(on: req.db)
                 .filter(\.$user.$id == user.requireID())
@@ -82,11 +129,15 @@ struct UserController: RouteCollection {
             
             let cardFlipInitialAverage = cardFlipAttempt.initialAverage
             let cardFlipCurrentAverage = cardFlipAttempt.currentAverage
-            let cardFlipProgress = ((cardFlipInitialAverage - cardFlipCurrentAverage) / cardFlipInitialAverage) * 100
+            let cardFlipConvertedInitialValue = 100 / cardFlipInitialAverage
+            let cardFlipConvertedCurrentValue = 100 / cardFlipCurrentAverage
+            let cardFlipProgress = ((cardFlipConvertedCurrentValue - cardFlipConvertedInitialValue) / cardFlipConvertedInitialValue) * 100
             
             let colorMatchInitialAverage = colorMatchAttempt.initialAverage
             let colorMatchCurrentAverage = colorMatchAttempt.currentAverage
-            let colorMatchProgress = ((colorMatchInitialAverage - colorMatchCurrentAverage) / colorMatchInitialAverage) * 100
+            let colorMatchConvertedInitialValue = colorMatchInitialAverage
+            let colorMatchConvertedCurrentValue = colorMatchCurrentAverage
+            let colorMatchProgress = ((colorMatchConvertedCurrentValue - colorMatchConvertedInitialValue) / colorMatchConvertedInitialValue) * 100
             
             progress = (cardFlipProgress + colorMatchProgress) / 2
         case .colorMatch:

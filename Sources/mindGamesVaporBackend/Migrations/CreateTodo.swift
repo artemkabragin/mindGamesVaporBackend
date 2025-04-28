@@ -29,6 +29,38 @@ struct CreateReactionAttempts: Migration {
     }
 }
 
+struct CreateCardFlipAttempts: Migration {
+    func prepare(on database: any Database) -> EventLoopFuture<Void> {
+        database.schema("card_flip_attempts")
+            .id()
+            .field("initial_average", .double, .required)
+            .field("current_average", .double, .required)
+            .field("attempts", .array(of: .double), .required)
+            .field("user_id", .uuid, .required, .references("users", "id"))
+            .create()
+    }
+
+    func revert(on database: any Database) -> EventLoopFuture<Void> {
+        database.schema("card_flip_attempts").delete()
+    }
+}
+
+struct CreateColorMatchAttempts: Migration {
+    func prepare(on database: any Database) -> EventLoopFuture<Void> {
+        database.schema("color_match_attempts")
+            .id()
+            .field("initial_average", .double, .required)
+            .field("current_average", .double, .required)
+            .field("attempts", .array(of: .double), .required)
+            .field("user_id", .uuid, .required, .references("users", "id"))
+            .create()
+    }
+
+    func revert(on database: any Database) -> EventLoopFuture<Void> {
+        database.schema("color_match_attempts").delete()
+    }
+}
+
 import Fluent
 
 import Fluent

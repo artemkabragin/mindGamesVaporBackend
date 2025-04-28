@@ -26,6 +26,8 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(RemoveReactionFieldsFromUsers())
     
     
+    app.migrations.add(CreateCardFlipAttempts())
+    app.migrations.add(CreateColorMatchAttempts())
     
 
     try await app.autoMigrate().get()

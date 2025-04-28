@@ -1,5 +1,6 @@
 import Vapor
 
 struct OnboardingData: Content {
-    var attempts: [Double]
+    let gameType: GameType
+    let attempts: [Double]
 }

@@ -31,6 +31,7 @@ final class CardFlipAttempts: Model, Content, @unchecked Sendable {
         self.id = id
         self.initialAverage = initialAverage
         self.currentAverage = currentAverage
+        self.attempts = attempts
         self.$user.id = userID
     }
 }
