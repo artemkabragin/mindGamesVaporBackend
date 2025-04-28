@@ -92,33 +92,42 @@ struct UserController: RouteCollection {
     }
     
     func getProgress(req: Request) async throws -> ProgressResponse {
-        let gameType = try req.query.get(GameType.self, at: "gameType")
+        let progressType = try req.query.get(ProgressType.self, at: "type")
 
         let user = try await userFromToken(req)
         
         let progress: Double
         
-        switch gameType {
-        case .reaction:
-            guard let reactionAttempt = try await ReactionAttempts.query(on: req.db)
-                .filter(\.$user.$id == user.requireID())
-                .first()
-            else {
-                throw Abort(.notFound, reason: "Reaction attempts not found for user")
-            }
-            let initialAverage = reactionAttempt.initialAverage
-            let currentAverage = reactionAttempt.currentAverage
-            let convertedInitialValue = 100 / initialAverage
-            let convertedCurrentValue = 100 / currentAverage
-            
-            progress = ((convertedCurrentValue - convertedInitialValue) / convertedInitialValue) * 100
-        case .cardFlip:
+        switch progressType {
+        case .memory:
             guard let cardFlipAttempt = try await CardFlipAttempts.query(on: req.db)
                 .filter(\.$user.$id == user.requireID())
                 .first()
             else {
                 throw Abort(.notFound, reason: "CardFlip attempts not found for user")
             }
+            
+            let cardFlipInitialAverage = cardFlipAttempt.initialAverage
+            let cardFlipCurrentAverage = cardFlipAttempt.currentAverage
+            let cardFlipConvertedInitialValue = 100 / cardFlipInitialAverage
+            let cardFlipConvertedCurrentValue = 100 / cardFlipCurrentAverage
+            let cardFlipProgress = ((cardFlipConvertedCurrentValue - cardFlipConvertedInitialValue) / cardFlipConvertedInitialValue) * 100
+            progress = cardFlipProgress
+            
+        case .attention:
+            
+            guard let reactionAttempt = try await ReactionAttempts.query(on: req.db)
+                .filter(\.$user.$id == user.requireID())
+                .first()
+            else {
+                throw Abort(.notFound, reason: "Reaction attempts not found for user")
+            }
+            let reactionInitialAverage = reactionAttempt.initialAverage
+            let reactionCurrentAverage = reactionAttempt.currentAverage
+            let reactionConvertedInitialValue = 100 / reactionInitialAverage
+            let reactionConvertedCurrentValue = 100 / reactionCurrentAverage
+            
+            let reactionProgress = ((reactionConvertedCurrentValue - reactionConvertedInitialValue) / reactionConvertedInitialValue) * 100
             
             guard let colorMatchAttempt = try await ColorMatchAttempts.query(on: req.db)
                 .filter(\.$user.$id == user.requireID())
@@ -127,27 +136,12 @@ struct UserController: RouteCollection {
                 throw Abort(.notFound, reason: "ColorMatch attempts not found for user")
             }
             
-            let cardFlipInitialAverage = cardFlipAttempt.initialAverage
-            let cardFlipCurrentAverage = cardFlipAttempt.currentAverage
-            let cardFlipConvertedInitialValue = 100 / cardFlipInitialAverage
-            let cardFlipConvertedCurrentValue = 100 / cardFlipCurrentAverage
-            let cardFlipProgress = ((cardFlipConvertedCurrentValue - cardFlipConvertedInitialValue) / cardFlipConvertedInitialValue) * 100
-            
             let colorMatchInitialAverage = colorMatchAttempt.initialAverage
             let colorMatchCurrentAverage = colorMatchAttempt.currentAverage
             let colorMatchConvertedInitialValue = colorMatchInitialAverage
             let colorMatchConvertedCurrentValue = colorMatchCurrentAverage
             let colorMatchProgress = ((colorMatchConvertedCurrentValue - colorMatchConvertedInitialValue) / colorMatchConvertedInitialValue) * 100
-            
-            progress = (cardFlipProgress + colorMatchProgress) / 2
-        case .colorMatch:
-            guard let reactionAttempt = try await ColorMatchAttempts.query(on: req.db)
-                .filter(\.$user.$id == user.requireID())
-                .first()
-            else {
-                throw Abort(.notFound, reason: "ColorMatch attempts not found for user")
-            }
-            progress = 0
+            progress = (reactionProgress + colorMatchProgress) / 2
         }
         
         return ProgressResponse(progress: progress)
@@ -168,8 +162,4 @@ struct UserController: RouteCollection {
         
         return token.user
     }
-}
-
-struct ProgressRequest: Content {
-    let gameType: GameType
 }
