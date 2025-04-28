@@ -14,25 +14,13 @@ final class User: Model, Content, @unchecked Sendable {
     
     @Field(key: "passwordHash")
     var passwordHash: String
-    
-    @Field(key: "initial_average")
-    var initialAverage: Double
-    
-    @Field(key: "current_average")
-    var currentAverage: Double
-    
-    @Field(key: "attempts")
-    var attempts: [Double]
 
     init() {}
 
-    init(id: UUID? = nil, username: String, passwordHash: String, initialAverage: Double = 0, currentAverage: Double = 0, attempts: [Double] = []) {
+    init(id: UUID? = nil, username: String, passwordHash: String) {
         self.id = id
         self.username = username
         self.passwordHash = passwordHash
-        self.initialAverage = initialAverage
-        self.currentAverage = currentAverage
-        self.attempts = attempts
     }
 }
 

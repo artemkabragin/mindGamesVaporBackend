@@ -13,11 +13,16 @@ struct UserController: RouteCollection {
     func submitOnboarding(req: Request) async throws -> Double {
         let data = try req.content.decode(OnboardingData.self)
         let initialAverage = data.attempts.reduce(0, +) / Double(data.attempts.count)
-        
+
         let user = try await userFromToken(req)
-        user.initialAverage = initialAverage
-        try await user.save(on: req.db)
-        
+
+        let reactionAttempt = ReactionAttempts(
+            initialAverage: initialAverage,
+            userID: try user.requireID()
+        )
+
+        try await reactionAttempt.save(on: req.db)
+
         return initialAverage
     }
     
@@ -26,17 +31,74 @@ struct UserController: RouteCollection {
         
         let user = try await userFromToken(req)
         
-        user.attempts.append(data.attempt)
-        user.currentAverage = user.attempts.reduce(0, +) / Double(user.attempts.count)
+        guard let reactionAttempt = try await ReactionAttempts.query(on: req.db)
+            .filter(\.$user.$id == user.requireID())
+            .first()
+        else {
+            throw Abort(.notFound, reason: "Reaction attempts not found for user")
+        }
         
-        try await user.save(on: req.db)
+        reactionAttempt.attempts.append(data.attempt)
+        
+        reactionAttempt.currentAverage = reactionAttempt.attempts.reduce(0, +) / Double(reactionAttempt.attempts.count)
+        
+        try await reactionAttempt.save(on: req.db)
         
         return .ok
     }
     
     func getProgress(req: Request) async throws -> ProgressResponse {
+        let gameType = try req.query.get(GameType.self, at: "gameType")
+
         let user = try await userFromToken(req)
-        let progress = ((user.initialAverage - user.currentAverage) / user.initialAverage) * 100
+        
+        let progress: Double
+        
+        switch gameType {
+        case .reaction:
+            guard let reactionAttempt = try await ReactionAttempts.query(on: req.db)
+                .filter(\.$user.$id == user.requireID())
+                .first()
+            else {
+                throw Abort(.notFound, reason: "Reaction attempts not found for user")
+            }
+            let initialAverage = reactionAttempt.initialAverage
+            let currentAverage = reactionAttempt.currentAverage
+            progress = ((initialAverage - currentAverage) / initialAverage) * 100
+        case .cardFlip:
+            guard let cardFlipAttempt = try await CardFlipAttempts.query(on: req.db)
+                .filter(\.$user.$id == user.requireID())
+                .first()
+            else {
+                throw Abort(.notFound, reason: "CardFlip attempts not found for user")
+            }
+            
+            guard let colorMatchAttempt = try await ColorMatchAttempts.query(on: req.db)
+                .filter(\.$user.$id == user.requireID())
+                .first()
+            else {
+                throw Abort(.notFound, reason: "ColorMatch attempts not found for user")
+            }
+            
+            let cardFlipInitialAverage = cardFlipAttempt.initialAverage
+            let cardFlipCurrentAverage = cardFlipAttempt.currentAverage
+            let cardFlipProgress = ((cardFlipInitialAverage - cardFlipCurrentAverage) / cardFlipInitialAverage) * 100
+            
+            let colorMatchInitialAverage = colorMatchAttempt.initialAverage
+            let colorMatchCurrentAverage = colorMatchAttempt.currentAverage
+            let colorMatchProgress = ((colorMatchInitialAverage - colorMatchCurrentAverage) / colorMatchInitialAverage) * 100
+            
+            progress = (cardFlipProgress + colorMatchProgress) / 2
+        case .colorMatch:
+            guard let reactionAttempt = try await ColorMatchAttempts.query(on: req.db)
+                .filter(\.$user.$id == user.requireID())
+                .first()
+            else {
+                throw Abort(.notFound, reason: "ColorMatch attempts not found for user")
+            }
+            progress = 0
+        }
+        
         return ProgressResponse(progress: progress)
     }
     
@@ -57,18 +119,6 @@ struct UserController: RouteCollection {
     }
 }
 
-
-// Структура данных для онбординга
-struct OnboardingData: Content {
-    var attempts: [Double]
-}
-
-// Структура данных для попытки игры
-struct GameAttemptData: Content {
-    var attempt: Double
-}
-
-// Структура для ответа с прогрессом
-struct ProgressResponse: Content {
-    var progress: Double
+struct ProgressRequest: Content {
+    let gameType: GameType
 }

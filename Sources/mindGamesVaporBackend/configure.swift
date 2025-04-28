@@ -20,6 +20,13 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(CreateToken())
     
     app.migrations.add(AddAveragesToUsers())
+    
+    app.migrations.add(CreateReactionAttempts())
+    
+    app.migrations.add(RemoveReactionFieldsFromUsers())
+    
+    
+    
 
     try await app.autoMigrate().get()
 

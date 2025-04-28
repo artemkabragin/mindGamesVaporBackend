@@ -1,15 +1,15 @@
-import Vapor
 import Fluent
+import Vapor
 
-final class ReactionAttempts: Model, Content, @unchecked Sendable {
-    static let schema = "reaction_attempts"
+final class CardFlipAttempts: Model, Content, @unchecked Sendable {
+    static let schema = "card_flip_attempts"
 
     @ID(key: .id)
     var id: UUID?
 
     @Field(key: "initial_average")
     var initialAverage: Double
-    
+
     @Field(key: "current_average")
     var currentAverage: Double
     
@@ -31,7 +31,6 @@ final class ReactionAttempts: Model, Content, @unchecked Sendable {
         self.id = id
         self.initialAverage = initialAverage
         self.currentAverage = currentAverage
-        self.attempts = attempts
         self.$user.id = userID
     }
 }
