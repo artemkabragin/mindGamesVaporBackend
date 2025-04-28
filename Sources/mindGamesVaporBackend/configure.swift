@@ -18,6 +18,8 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(CreateUser())
 
     app.migrations.add(CreateToken())
+    
+    app.migrations.add(AddAveragesToUsers())
 
     try await app.autoMigrate().get()
 
