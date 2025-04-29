@@ -14,149 +14,155 @@ struct AchievementService {
             .filter(\.$user.$id == user.requireID())
             .with(\.$achievement)
             .all()
+            .filter{ $0.achievement.gameType == attempt.gameType }
         
-        async let highScoreAchievement = try await checkOrCreateHighScore(
-            for: user,
-            attempt: attempt,
-            userAchievements: userAchievements,
-            db: db
-        )
+        let tasks = AchievementType.allCases.map { type in
+            Task {
+                try await checkOrCreateAchievement(
+                    by: type,
+                    for: user,
+                    attempt: attempt,
+                    userAchievements: userAchievements,
+                    db: db
+                )
+            }
+        }
         
-        async let totalPlaysAchievement = try await checkOrCreateTotalPlays(
-            for: user,
-            attempt: attempt,
-            userAchievements: userAchievements,
-            db: db
-        )
+        var results: [UserAchievement] = []
         
-        async let dailyStreakAchievement = try await checkOrCreateDailyStreak(
-            for: user,
-            attempt: attempt,
-            userAchievements: userAchievements,
-            db: db
-        )
+        for task in tasks {
+            if let achievement = try await task.value {
+                results.append(achievement)
+            }
+        }
         
-        let results: [UserAchievement?] = [
-            try await highScoreAchievement,
-            try await totalPlaysAchievement,
-            try await dailyStreakAchievement
-        ]
-        return results.compactMap { $0 }
+        return results
     }
 }
 
 // MARK: - Private Methods
 
 private extension AchievementService {
-    func checkOrCreateHighScore(
+    func checkOrCreateAchievement(
+        by type: AchievementType,
         for user: User,
         attempt: GameAttemptData,
         userAchievements: [UserAchievement],
         db: any Database
     ) async throws -> UserAchievement? {
-        if let highScoreAchievement = userAchievements.first(where: { $0.achievement.type == .highScore && $0.achievement.gameType == attempt.gameType }) {
-            if attempt.attempt < (highScoreAchievement.progress == 0 ? Double.greatestFiniteMagnitude : highScoreAchievement.progress) {
-                let currentDate = Date()
-                highScoreAchievement.progress = attempt.attempt
-                highScoreAchievement.isUnlocked = true
-                highScoreAchievement.dateUnlocked = currentDate
-                highScoreAchievement.dateChanged = currentDate
-                try await highScoreAchievement.save(on: db)
-                return highScoreAchievement
-            }
-        } else {
-            if let achievement = try await findAchievement(type: .highScore, gameType: attempt.gameType, db: db) {
-                let currentDate = Date()
-                let newUserAchievement = UserAchievement(
-                    userID: try user.requireID(),
-                    achievementID: try achievement.requireID(),
-                    isUnlocked: true,
-                    progress: attempt.attempt,
-                    dateChanged: currentDate,
-                    dateUnlocked: currentDate
-                )
-                try await newUserAchievement.save(on: db)
-                return newUserAchievement
-            }
+        guard let userAchievement = userAchievements.first(where: { $0.achievement.type == type }) else {
+            return try await createNewUserAchievementIfPossible(
+                type: type,
+                for: user,
+                attempt: attempt,
+                db: db
+            )
         }
         
-        return nil
-    }
-    
-    func checkOrCreateTotalPlays(
-        for user: User,
-        attempt: GameAttemptData,
-        userAchievements: [UserAchievement],
-        db: any Database
-    ) async throws -> UserAchievement? {
-        if let totalPlaysAchievement = userAchievements.first(where: { $0.achievement.type == .totalPlays && $0.achievement.gameType == attempt.gameType }) {
-            totalPlaysAchievement.dateChanged = Date()
-            totalPlaysAchievement.progress += 0.1
-            if totalPlaysAchievement.progress > 0.9 && !totalPlaysAchievement.isUnlocked {
-                totalPlaysAchievement.isUnlocked = true
-                totalPlaysAchievement.dateUnlocked = Date()
-            }
-            try await totalPlaysAchievement.save(on: db)
-            return totalPlaysAchievement
-        } else {
-            if let achievement = try await findAchievement(type: .totalPlays, gameType: attempt.gameType, db: db) {
-                let newUserAchievement = UserAchievement(
-                    userID: try user.requireID(),
-                    achievementID: try achievement.requireID(),
-                    isUnlocked: false,
-                    progress: 0.1,
-                    dateChanged: Date(),
-                    dateUnlocked: nil
-                )
-                try await newUserAchievement.save(on: db)
-                return newUserAchievement
-            }
+        switch type {
+        case .dailyStreak:
+            return try await updateDailyStreakAchievement(
+                userAchievement,
+                db: db
+            )
+        case .highScore:
+            return try await updateHighScoreAchievement(
+                userAchievement,
+                attempt: attempt,
+                db: db
+            )
+        case .totalPlays:
+            return try await updateTotalPlaysAchievement(
+                userAchievement,
+                db: db
+            )
+        case .perfectScore:
+            return nil
         }
-        return nil
     }
     
-    func checkOrCreateDailyStreak(
-        for user: User,
+    func updateHighScoreAchievement(
+        _ userAchievement: UserAchievement,
         attempt: GameAttemptData,
-        userAchievements: [UserAchievement],
         db: any Database
-    ) async throws -> UserAchievement? {
+    ) async throws -> UserAchievement {
+        let currentProgress = userAchievement.progress == 0
+        ? Double.greatestFiniteMagnitude
+        : userAchievement.progress
         
-        if let totalPlaysAchievement = userAchievements.first(where: { $0.achievement.type == .dailyStreak && $0.achievement.gameType == attempt.gameType }) {
-            let currentDate = Date()
-            let lastDate = totalPlaysAchievement.dateChanged
-            
-            var calendar = Calendar.current
-            calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-            
-            if calendar.isDateInYesterday(lastDate) {
-                totalPlaysAchievement.progress += 0.1
-            } else if !calendar.isDateInToday(lastDate) {
-                totalPlaysAchievement.progress = 0.1
-            }
-                        
-            totalPlaysAchievement.dateChanged = currentDate
-            if totalPlaysAchievement.progress > 0.9 && !totalPlaysAchievement.isUnlocked {
-                totalPlaysAchievement.isUnlocked = true
-                totalPlaysAchievement.dateUnlocked = currentDate
-            }
-            try await totalPlaysAchievement.save(on: db)
-            return totalPlaysAchievement
-        } else {
-            if let achievement = try await findAchievement(type: .dailyStreak, gameType: attempt.gameType, db: db) {
-                let newUserAchievement = UserAchievement(
-                    userID: try user.requireID(),
-                    achievementID: try achievement.requireID(),
-                    isUnlocked: false,
-                    progress: 0.1,
-                    dateChanged: Date(),
-                    dateUnlocked: nil
-                )
-                try await newUserAchievement.save(on: db)
-                return newUserAchievement
-            }
+        guard attempt.attempt < currentProgress else { return userAchievement }
+        
+        let currentDate = Date()
+        userAchievement.progress = attempt.attempt
+        userAchievement.isUnlocked = true
+        userAchievement.dateUnlocked = currentDate
+        userAchievement.dateChanged = currentDate
+        try await userAchievement.save(on: db)
+        return userAchievement
+    }
+    
+    func updateTotalPlaysAchievement(
+        _ userAchievement: UserAchievement,
+        db: any Database
+    ) async throws -> UserAchievement {
+        userAchievement.dateChanged = Date()
+        userAchievement.progress += 0.1
+        if userAchievement.progress > 0.9 && !userAchievement.isUnlocked {
+            userAchievement.isUnlocked = true
+            userAchievement.dateUnlocked = Date()
         }
-        return nil
+        try await userAchievement.save(on: db)
+        return userAchievement
+    }
+    
+    func updateDailyStreakAchievement(
+        _ userAchievement: UserAchievement,
+        db: any Database
+    ) async throws -> UserAchievement {
+        let lastDate = userAchievement.dateChanged
+        
+        var calendar = Calendar.current
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        
+        if calendar.isDateInYesterday(lastDate) {
+            userAchievement.progress += 0.1
+        } else if !calendar.isDateInToday(lastDate) {
+            userAchievement.progress = 0.1
+        }
+        
+        let currentDate = Date()
+        
+        userAchievement.dateChanged = currentDate
+        
+        if userAchievement.progress > 0.9 && !userAchievement.isUnlocked {
+            userAchievement.isUnlocked = true
+            userAchievement.dateUnlocked = currentDate
+        }
+        try await userAchievement.save(on: db)
+        return userAchievement
+    }
+    
+    func createNewUserAchievementIfPossible(
+        type: AchievementType,
+        for user: User,
+        attempt: GameAttemptData,
+        db: any Database
+    ) async throws -> UserAchievement? {
+        guard let achievement = try await findAchievement(
+            type: type,
+            gameType: attempt.gameType,
+            db: db
+        ) else {
+            return nil
+        }
+        
+        let newUserAchievement = try createNewUserAchievement(
+            achievement,
+            for: user,
+            attempt: attempt
+        )
+        try await newUserAchievement.save(on: db)
+        return newUserAchievement
     }
     
     func findAchievement(
@@ -169,4 +175,87 @@ private extension AchievementService {
             .filter(\.$gameType == gameType)
             .first()
     }
+    
+    func createNewUserAchievement(
+        _ achievement: Achievement,
+        for user: User,
+        attempt: GameAttemptData
+    ) throws -> UserAchievement {
+        let progress: Double
+        let isUnlocked: Bool
+        
+        switch achievement.type {
+        case .dailyStreak:
+            progress = 0.1
+            isUnlocked = false
+        case .perfectScore:
+            // TODO: -
+            progress = 0.1
+            isUnlocked = false
+        case .totalPlays:
+            progress = 0.1
+            isUnlocked = false
+        case .highScore:
+            progress = attempt.attempt
+            isUnlocked = true
+        }
+        
+        let currentDate = Date()
+        
+        let newUserAchievement = UserAchievement(
+            userID: try user.requireID(),
+            achievementID: try achievement.requireID(),
+            isUnlocked: isUnlocked,
+            progress: progress,
+            dateChanged: currentDate,
+            dateUnlocked: isUnlocked ? currentDate : nil
+        )
+        return newUserAchievement
+    }
+    
+//    func checkOrCreatePerfectScore(
+//        for user: User,
+//        attempt: GameAttemptData,
+//        userAchievements: [UserAchievement],
+//        db: any Database
+//    ) async throws -> UserAchievement? {
+//        
+//        if let totalPlaysAchievement = userAchievements.first(where: { $0.achievement.type == .perfectScore && $0.achievement.gameType == attempt.gameType }) {
+//            let currentDate = Date()
+//            let lastDate = totalPlaysAchievement.dateChanged
+//            
+//            var calendar = Calendar.current
+//            calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+//            
+//            if calendar.isDateInYesterday(lastDate) {
+//                totalPlaysAchievement.progress += 0.1
+//            } else if !calendar.isDateInToday(lastDate) {
+//                totalPlaysAchievement.progress = 0.1
+//            }
+//                        
+//            totalPlaysAchievement.dateChanged = currentDate
+//            if totalPlaysAchievement.progress > 0.9 && !totalPlaysAchievement.isUnlocked {
+//                totalPlaysAchievement.isUnlocked = true
+//                totalPlaysAchievement.dateUnlocked = currentDate
+//            }
+//            try await totalPlaysAchievement.save(on: db)
+//            return totalPlaysAchievement
+//        } else {
+//            if let achievement = try await findAchievement(type: .perfectScore, gameType: attempt.gameType, db: db) {
+//                let newUserAchievement = UserAchievement(
+//                    userID: try user.requireID(),
+//                    achievementID: try achievement.requireID(),
+//                    isUnlocked: false,
+//                    progress: 0.1,
+//                    dateChanged: Date(),
+//                    dateUnlocked: nil
+//                )
+//                try await newUserAchievement.save(on: db)
+//                return newUserAchievement
+//            }
+//        }
+//        return nil
+//    }
+    
+    
 }
