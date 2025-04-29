@@ -39,7 +39,7 @@ struct AuthController: RouteCollection {
             .filter(\.$username == userDTO.username)
             .first()
         else {
-            throw Abort(.unauthorized, reason: "Такого пользователя нет или пароль неверный")
+            throw Abort(.unauthorized, reason: "Такого пользователя нет")
         }
 
         let isPasswordCorrect = try Bcrypt.verify(
@@ -48,7 +48,7 @@ struct AuthController: RouteCollection {
         )
         
         guard isPasswordCorrect else {
-            throw Abort(.unauthorized, reason: "Такого пользователя нет или пароль неверный")
+            throw Abort(.unauthorized, reason: "Пароль неверный")
         }
 
         return try await generateToken(

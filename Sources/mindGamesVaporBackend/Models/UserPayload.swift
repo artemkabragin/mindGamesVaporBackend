@@ -13,6 +13,6 @@ extension UserPayload {
     init(user: User) throws {
         let userID = try user.requireID().uuidString
         self.subject = .init(value: userID)
-        self.expiration = .init(value: .init(timeIntervalSinceNow: 60)) // 60 sek
+        self.expiration = .init(value: .init(timeIntervalSinceNow: 60 * 15)) // 15 min sek
     }
 }
