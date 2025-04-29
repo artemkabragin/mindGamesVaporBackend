@@ -3,39 +3,52 @@ import Fluent
 
 struct AchievementService {
     
-    static func checkAchievements(for user: User, attempt: GameAttemptData, db: any Database) async throws -> [UserAchievement] {
-        
+    // MARK: - Public Methods
+    
+    func checkAchievements(
+        for user: User,
+        attempt: GameAttemptData,
+        db: any Database
+    ) async throws -> [UserAchievement] {
         let userAchievements = try await UserAchievement.query(on: db)
             .filter(\.$user.$id == user.requireID())
             .with(\.$achievement)
             .all()
         
-        async let a = try await checkOrCreateHighScore(
+        async let highScoreAchievement = try await checkOrCreateHighScore(
             for: user,
             attempt: attempt,
             userAchievements: userAchievements,
             db: db
         )
         
-        async let b = try await checkOrCreateTotalPlays(
+        async let totalPlaysAchievement = try await checkOrCreateTotalPlays(
             for: user,
             attempt: attempt,
             userAchievements: userAchievements,
             db: db
         )
         
-        async let c = try await checkOrCreateDailyStreak(
+        async let dailyStreakAchievement = try await checkOrCreateDailyStreak(
             for: user,
             attempt: attempt,
             userAchievements: userAchievements,
             db: db
         )
         
-        let results: [UserAchievement?] = [try await a, try await b, try await c]
+        let results: [UserAchievement?] = [
+            try await highScoreAchievement,
+            try await totalPlaysAchievement,
+            try await dailyStreakAchievement
+        ]
         return results.compactMap { $0 }
     }
-    
-    private static func checkOrCreateHighScore(
+}
+
+// MARK: - Private Methods
+
+private extension AchievementService {
+    func checkOrCreateHighScore(
         for user: User,
         attempt: GameAttemptData,
         userAchievements: [UserAchievement],
@@ -44,23 +57,25 @@ struct AchievementService {
         if let highScoreAchievement = userAchievements.first(where: { $0.achievement.type == .highScore && $0.achievement.gameType == attempt.gameType }) {
             // Если ачивка уже есть — обновляем её
             if attempt.attempt < (highScoreAchievement.progress == 0 ? Double.greatestFiniteMagnitude : highScoreAchievement.progress) {
+                let currentDate = Date()
                 highScoreAchievement.progress = attempt.attempt
                 highScoreAchievement.isUnlocked = true
-                highScoreAchievement.dateUnlocked = Date()
-                highScoreAchievement.dateChanged = Date()
+                highScoreAchievement.dateUnlocked = currentDate
+                highScoreAchievement.dateChanged = currentDate
                 try await highScoreAchievement.save(on: db)
                 return highScoreAchievement
             }
         } else {
             // Если нет — создаём новую ачивку для highScore
             if let achievement = try await findAchievement(type: .highScore, gameType: attempt.gameType, db: db) {
+                let currentDate = Date()
                 let newUserAchievement = UserAchievement(
                     userID: try user.requireID(),
                     achievementID: try achievement.requireID(),
                     isUnlocked: true,
                     progress: attempt.attempt,
-                    dateChanged: Date(),
-                    dateUnlocked: Date()
+                    dateChanged: currentDate,
+                    dateUnlocked: currentDate
                 )
                 try await newUserAchievement.save(on: db)
                 return newUserAchievement
@@ -70,13 +85,12 @@ struct AchievementService {
         return nil
     }
     
-    private static func checkOrCreateTotalPlays(
+    func checkOrCreateTotalPlays(
         for user: User,
         attempt: GameAttemptData,
         userAchievements: [UserAchievement],
         db: any Database
     ) async throws -> UserAchievement? {
-        
         if let totalPlaysAchievement = userAchievements.first(where: { $0.achievement.type == .totalPlays && $0.achievement.gameType == attempt.gameType }) {
             totalPlaysAchievement.dateChanged = Date()
             totalPlaysAchievement.progress += 0.1
@@ -103,7 +117,7 @@ struct AchievementService {
         return nil
     }
     
-    private static func checkOrCreateDailyStreak(
+    func checkOrCreateDailyStreak(
         for user: User,
         attempt: GameAttemptData,
         userAchievements: [UserAchievement],
@@ -111,19 +125,22 @@ struct AchievementService {
     ) async throws -> UserAchievement? {
         
         if let totalPlaysAchievement = userAchievements.first(where: { $0.achievement.type == .dailyStreak && $0.achievement.gameType == attempt.gameType }) {
+            let currentDate = Date()
             let lastDate = totalPlaysAchievement.dateChanged
             
-            let calendar = Calendar.current
+            var calendar = Calendar.current
+            calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+            
             if calendar.isDateInYesterday(lastDate) {
                 totalPlaysAchievement.progress += 0.1
-            } else {
+            } else if !calendar.isDateInToday(lastDate) {
                 totalPlaysAchievement.progress = 0.1
             }
                         
-            totalPlaysAchievement.dateChanged = Date()
+            totalPlaysAchievement.dateChanged = currentDate
             if totalPlaysAchievement.progress > 0.9 && !totalPlaysAchievement.isUnlocked {
                 totalPlaysAchievement.isUnlocked = true
-                totalPlaysAchievement.dateUnlocked = Date()
+                totalPlaysAchievement.dateUnlocked = currentDate
             }
             try await totalPlaysAchievement.save(on: db)
             return totalPlaysAchievement
@@ -144,7 +161,7 @@ struct AchievementService {
         return nil
     }
     
-    private static func findAchievement(
+    func findAchievement(
         type: AchievementType,
         gameType: GameType,
         db: any Database

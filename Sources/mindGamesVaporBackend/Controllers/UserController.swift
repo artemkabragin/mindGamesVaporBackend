@@ -2,6 +2,9 @@ import Vapor
 import Fluent
 
 struct UserController: RouteCollection {
+    
+    let achievementService = AchievementService()
+    
     func boot(routes: any RoutesBuilder) throws {
         let usersRoute = routes.grouped("users")
         
@@ -88,7 +91,7 @@ struct UserController: RouteCollection {
             try await reactionAttempt.save(on: req.db)
         }
         
-        let userAchievements = try await AchievementService.checkAchievements(
+        let userAchievements = try await achievementService.checkAchievements(
             for: user,
             attempt: data,
             db: req.db
