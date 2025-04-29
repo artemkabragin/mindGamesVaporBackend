@@ -55,7 +55,6 @@ private extension AchievementService {
         db: any Database
     ) async throws -> UserAchievement? {
         if let highScoreAchievement = userAchievements.first(where: { $0.achievement.type == .highScore && $0.achievement.gameType == attempt.gameType }) {
-            // Если ачивка уже есть — обновляем её
             if attempt.attempt < (highScoreAchievement.progress == 0 ? Double.greatestFiniteMagnitude : highScoreAchievement.progress) {
                 let currentDate = Date()
                 highScoreAchievement.progress = attempt.attempt
@@ -66,7 +65,6 @@ private extension AchievementService {
                 return highScoreAchievement
             }
         } else {
-            // Если нет — создаём новую ачивку для highScore
             if let achievement = try await findAchievement(type: .highScore, gameType: attempt.gameType, db: db) {
                 let currentDate = Date()
                 let newUserAchievement = UserAchievement(

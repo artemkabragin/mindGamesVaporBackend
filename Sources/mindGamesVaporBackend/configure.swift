@@ -12,27 +12,18 @@ public func configure(_ app: Application) async throws {
         database: Environment.get("DATABASE_NAME") ?? "auth_database",
         tls: .prefer(try .init(configuration: .clientDefault)))
     ), as: .psql)
-
-    app.migrations.add(CreateTodo())
     
     app.migrations.add(CreateUser())
-
     app.migrations.add(CreateToken())
-    
     app.migrations.add(AddAveragesToUsers())
-    
     app.migrations.add(CreateReactionAttempts())
-    
     app.migrations.add(RemoveReactionFieldsFromUsers())
-    
-    
     app.migrations.add(CreateCardFlipAttempts())
     app.migrations.add(AddDateChangedToUserAchievements())
     
 
     try await app.autoMigrate().get()
 
-    
     // register routes
     try routes(app)
 }
