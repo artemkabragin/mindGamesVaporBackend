@@ -2,6 +2,7 @@ import NIOSSL
 import Fluent
 import FluentPostgresDriver
 import Vapor
+import JWT
 
 public func configure(_ app: Application) async throws {
     app.databases.use(DatabaseConfigurationFactory.postgres(configuration: .init(
@@ -13,6 +14,8 @@ public func configure(_ app: Application) async throws {
         tls: .prefer(try .init(configuration: .clientDefault)))
     ), as: .psql)
     
+    app.jwt.signers.use(.hs256(key: Environment.get("JWT_SECRET") ?? "super-secret"))
+
     app.migrations.add(CreateUser())
     app.migrations.add(CreateToken())
     app.migrations.add(AddAveragesToUsers())
@@ -20,6 +23,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(RemoveReactionFieldsFromUsers())
     app.migrations.add(CreateCardFlipAttempts())
     app.migrations.add(AddDateChangedToUserAchievements())
+    app.migrations.add(CreateRefreshToken())
     
 
     try await app.autoMigrate().get()

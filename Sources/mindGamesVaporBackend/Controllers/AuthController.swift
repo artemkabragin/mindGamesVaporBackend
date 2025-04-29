@@ -6,9 +6,10 @@ struct AuthController: RouteCollection {
         let authRoutes = routes.grouped("auth")
         authRoutes.post("register", use: register)
         authRoutes.post("login", use: login)
+        authRoutes.post("refresh", use: refresh)
     }
     
-    func register(req: Request) async throws -> Token {
+    func register(req: Request) async throws -> TokenResponse {
         let create = try req.content.decode(User.Create.self)
         
         if try await User.query(on: req.db)
@@ -25,12 +26,13 @@ struct AuthController: RouteCollection {
         
         try await user.save(on: req.db)
         
-        let token = try Token.generate(for: user)
-        try await token.save(on: req.db)
-        return token
+        return try await generateToken(
+            for: user,
+            on: req
+        )
     }
     
-    func login(req: Request) async throws -> Token {
+    func login(req: Request) async throws -> TokenResponse {
         let userDTO = try req.content.decode(User.Login.self)
         
         guard let user = try await User.query(on: req.db)
@@ -49,8 +51,48 @@ struct AuthController: RouteCollection {
             throw Abort(.unauthorized, reason: "Такого пользователя нет или пароль неверный")
         }
 
-        let token = try Token.generate(for: user)
-        try await token.save(on: req.db)
-        return token
+        return try await generateToken(
+            for: user,
+            on: req
+        )
+    }
+    
+    func refresh(req: Request) async throws -> TokenResponse {
+        let body = try req.content.decode(RefreshRequest.self)
+        
+        guard
+            let token = try await RefreshToken.query(on: req.db)
+                .filter(\.$value == body.refreshToken)
+                .with(\.$user)
+                .first(),
+            token.expiresAt > Date()
+        else {
+            throw Abort(.unauthorized)
+        }
+        
+        let accessToken = try req.jwt.sign(UserPayload(user: token.user))
+        
+        return TokenResponse(
+            accessToken: accessToken,
+            refreshToken: token.value
+        )
+    }
+}
+
+// MARK: - Private Methods
+
+private extension AuthController {
+    func generateToken(
+        for user: User,
+        on req: Request
+    ) async throws -> TokenResponse {
+        let accessToken = try req.jwt.sign(UserPayload(user: user))
+        let refreshToken = try RefreshToken.generate(for: user)
+        try await refreshToken.save(on: req.db)
+        
+        return TokenResponse(
+            accessToken: accessToken,
+            refreshToken: refreshToken.value
+        )
     }
 }

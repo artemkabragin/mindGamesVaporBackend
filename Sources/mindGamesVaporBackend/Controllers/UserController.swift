@@ -4,9 +4,10 @@ import Fluent
 struct UserController: RouteCollection {
     
     let achievementService = AchievementService()
+    let jwtAuthenticator = JWTAuthenticator()
     
     func boot(routes: any RoutesBuilder) throws {
-        let usersRoute = routes.grouped("users")
+        let usersRoute = routes.grouped("users").grouped(jwtAuthenticator)
         
         usersRoute.post("onboarding", use: submitOnboarding)
         usersRoute.post("play", use: submitGameAttempt)
@@ -15,7 +16,7 @@ struct UserController: RouteCollection {
     
     func submitOnboarding(req: Request) async throws -> Double {
         let data = try req.content.decode(OnboardingData.self)
-        let user = try await userFromToken(req)
+        let user = try await req.getUser()
         let initialAverage = data.attempts.reduce(0, +) / Double(data.attempts.count)
         
         switch data.gameType {
@@ -47,7 +48,7 @@ struct UserController: RouteCollection {
 
     func submitGameAttempt(req: Request) async throws -> [AchievementWithProgress] {
         let data = try req.content.decode(GameAttemptData.self)
-        let user = try await userFromToken(req)
+        let user = try await req.getUser()
         
         switch data.gameType {
         case .cardFlip:
@@ -119,7 +120,7 @@ struct UserController: RouteCollection {
     func getProgress(req: Request) async throws -> ProgressResponse {
         let progressType = try req.query.get(ProgressType.self, at: "type")
 
-        let user = try await userFromToken(req)
+        let user = try await req.getUser()
         
         let progress: Double
         
@@ -170,21 +171,5 @@ struct UserController: RouteCollection {
         }
         
         return ProgressResponse(progress: progress)
-    }
-    
-    private func userFromToken(_ req: Request) async throws -> User {
-        guard let tokenValue = req.headers.bearerAuthorization?.token else {
-            throw Abort(.unauthorized, reason: "Missing or invalid Authorization token")
-        }
-        
-        guard let token = try await Token.query(on: req.db)
-            .filter(\.$value == tokenValue)
-            .with(\.$user)
-            .first()
-        else {
-            throw Abort(.unauthorized, reason: "Invalid token or user not found")
-        }
-        
-        return token.user
     }
 }

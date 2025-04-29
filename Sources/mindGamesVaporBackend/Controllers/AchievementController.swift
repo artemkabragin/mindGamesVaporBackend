@@ -9,7 +9,7 @@ struct AchievementController: RouteCollection {
     }
     
     func achievements(req: Request) async throws -> AchievementResponse {
-        let user = try await userFromToken(req)
+        let user = try await req.getUser()
         let allAchievements = try await Achievement.query(on: req.db).all()
         let userAchievements = try await UserAchievement.query(on: req.db)
             .filter(\.$user.$id == user.requireID())
@@ -26,21 +26,5 @@ struct AchievementController: RouteCollection {
         }
         
         return AchievementResponse(achievements: achievementsWithProgress)
-    }
-    
-    private func userFromToken(_ req: Request) async throws -> User {
-        guard let tokenValue = req.headers.bearerAuthorization?.token else {
-            throw Abort(.unauthorized, reason: "Missing or invalid Authorization token")
-        }
-        
-        guard let token = try await Token.query(on: req.db)
-            .filter(\.$value == tokenValue)
-            .with(\.$user)
-            .first()
-        else {
-            throw Abort(.unauthorized, reason: "Invalid token or user not found")
-        }
-        
-        return token.user
     }
 }
