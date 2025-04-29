@@ -2,7 +2,6 @@ import Vapor
 import Fluent
 
 final class User: Model, Content, @unchecked Sendable {
-    typealias IDValue = UUID
     
     static let schema = "users"
     
@@ -24,8 +23,6 @@ final class User: Model, Content, @unchecked Sendable {
     }
 }
 
-
-
 extension User {
     struct Create: Content {
         let username: String
@@ -35,19 +32,5 @@ extension User {
     struct Login: Content {
         let username: String
         let password: String
-    }
-    
-    struct Public: Content {
-        let id: UUID?
-        let username: String
-    }
-    
-    struct Authenticated: Content {
-        var user: User
-        var token: String
-    }
-    
-    func asPublic() -> Public {
-        Public(id: id, username: username)
     }
 }

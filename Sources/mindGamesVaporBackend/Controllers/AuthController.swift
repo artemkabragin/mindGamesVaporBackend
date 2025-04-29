@@ -14,11 +14,14 @@ struct AuthController: RouteCollection {
         if try await User.query(on: req.db)
             .filter(\.$username == create.username)
             .first() != nil {
-            throw Abort(.conflict, reason: "User with this username already exists")
+            throw Abort(.conflict, reason: "Пользователь с таким логином уже существует")
         }
         
         let passwordHash = try Bcrypt.hash(create.password)
-        let user = User(username: create.username, passwordHash: passwordHash)
+        let user = User(
+            username: create.username,
+            passwordHash: passwordHash
+        )
         
         try await user.save(on: req.db)
         
@@ -37,7 +40,10 @@ struct AuthController: RouteCollection {
             throw Abort(.unauthorized, reason: "Такого пользователя нет или пароль неверный")
         }
 
-        let isPasswordCorrect = try Bcrypt.verify(userDTO.password, created: user.passwordHash)
+        let isPasswordCorrect = try Bcrypt.verify(
+            userDTO.password,
+            created: user.passwordHash
+        )
         
         guard isPasswordCorrect else {
             throw Abort(.unauthorized, reason: "Такого пользователя нет или пароль неверный")
