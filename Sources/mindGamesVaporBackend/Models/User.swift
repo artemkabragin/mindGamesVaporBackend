@@ -13,13 +13,29 @@ final class User: Model, Content, @unchecked Sendable, Authenticatable {
     
     @Field(key: "passwordHash")
     var passwordHash: String
+    
+    @Field(key: "isOnboardingComplete")
+    var isOnboardingComplete: Bool
 
     init() {}
 
-    init(id: UUID? = nil, username: String, passwordHash: String) {
+    init(
+        id: UUID? = nil,
+        username: String,
+        passwordHash: String,
+        isOnboardingComplete: Bool = false
+    ) {
         self.id = id
         self.username = username
         self.passwordHash = passwordHash
+        self.isOnboardingComplete = isOnboardingComplete
+    }
+    
+    func toPublic() -> User.Public {
+        User.Public(
+            username: username,
+            isOnboardingComplete: isOnboardingComplete
+        )
     }
 }
 
@@ -32,6 +48,11 @@ extension User {
     struct Login: Content {
         let username: String
         let password: String
+    }
+    
+    struct Public: Content {
+        let username: String
+        let isOnboardingComplete: Bool
     }
 }
 

@@ -9,7 +9,7 @@ struct AuthController: RouteCollection {
         authRoutes.post("refresh", use: refresh)
     }
     
-    func register(req: Request) async throws -> TokenResponse {
+    func register(req: Request) async throws -> AuthResponse {
         let create = try req.content.decode(User.Create.self)
         
         if try await User.query(on: req.db)
@@ -26,13 +26,18 @@ struct AuthController: RouteCollection {
         
         try await user.save(on: req.db)
         
-        return try await generateToken(
+        let token = try await generateToken(
             for: user,
             on: req
         )
+        
+        return AuthResponse(
+            token: token,
+            user: user.toPublic()
+        )
     }
     
-    func login(req: Request) async throws -> TokenResponse {
+    func login(req: Request) async throws -> AuthResponse {
         let userDTO = try req.content.decode(User.Login.self)
         
         guard let user = try await User.query(on: req.db)
@@ -51,13 +56,18 @@ struct AuthController: RouteCollection {
             throw Abort(.unauthorized, reason: "Пароль неверный")
         }
 
-        return try await generateToken(
+        let token = try await generateToken(
             for: user,
             on: req
         )
+        
+        return AuthResponse(
+            token: token,
+            user: user.toPublic()
+        )
     }
     
-    func refresh(req: Request) async throws -> TokenResponse {
+    func refresh(req: Request) async throws -> AuthResponse {
         let body = try req.content.decode(RefreshRequest.self)
         
         guard
@@ -70,11 +80,16 @@ struct AuthController: RouteCollection {
             throw Abort(.unauthorized)
         }
         
-        let accessToken = try req.jwt.sign(UserPayload(user: token.user))
-        
-        return TokenResponse(
+        let user = token.user
+        let accessToken = try req.jwt.sign(UserPayload(user: user))
+        let tokenResponse = TokenResponse(
             accessToken: accessToken,
             refreshToken: token.value
+        )
+        
+        return AuthResponse(
+            token: tokenResponse,
+            user: user.toPublic()
         )
     }
 }

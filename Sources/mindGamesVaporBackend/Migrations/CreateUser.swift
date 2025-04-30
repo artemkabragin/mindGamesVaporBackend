@@ -94,6 +94,20 @@ struct AddDateChangedToUserAchievements: Migration {
     }
 }
 
+struct AddOnboardingToUser: Migration {
+    func prepare(on database: any Database) -> EventLoopFuture<Void> {
+       database.schema("users")
+            .field("isOnboardingComplete", .bool)
+            .update()
+    }
+
+    func revert(on database: any Database) -> EventLoopFuture<Void> {
+        database.schema("users")
+            .deleteField("isOnboardingComplete")
+            .update()
+    }
+}
+
 //struct SeedAchievements1: Migration {
 //    func prepare(on database: any Database) -> EventLoopFuture<Void> {
 //        let achievements: [Achievement] = [

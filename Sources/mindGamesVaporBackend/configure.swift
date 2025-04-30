@@ -24,7 +24,7 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(CreateCardFlipAttempts())
     app.migrations.add(AddDateChangedToUserAchievements())
     app.migrations.add(CreateRefreshToken())
-    
+    app.migrations.add(AddOnboardingToUser())
 
     try await app.autoMigrate().get()
 

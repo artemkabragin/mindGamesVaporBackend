@@ -1,6 +1,11 @@
 import Vapor
 import Fluent
 
+struct OnboardingResponse: Content {
+    let average: Double
+    let isFullOnboardingComplete: Bool
+}
+
 struct UserController: RouteCollection {
     
     let achievementService = AchievementService()
@@ -14,7 +19,7 @@ struct UserController: RouteCollection {
         usersRoute.get("progress", use: getProgress)
     }
     
-    func submitOnboarding(req: Request) async throws -> Double {
+    func submitOnboarding(req: Request) async throws -> OnboardingResponse {
         let data = try req.content.decode(OnboardingData.self)
         let user = try await req.getUser()
         let initialAverage = data.attempts.reduce(0, +) / Double(data.attempts.count)
@@ -43,7 +48,39 @@ struct UserController: RouteCollection {
             try await reactionAttempt.save(on: req.db)
         }
         
-        return initialAverage
+        let isFullOnboardingComplete = try await isFullOnboardingComplete(req: req)
+        
+        return OnboardingResponse(
+            average: initialAverage,
+            isFullOnboardingComplete: isFullOnboardingComplete
+        )
+    }
+    
+    private func isFullOnboardingComplete(req: Request) async throws -> Bool {
+        let user = try await req.getUser()
+                
+        let cardFlipAttempt = try await CardFlipAttempts.query(on: req.db)
+            .filter(\.$user.$id == user.requireID())
+            .first()
+        
+        let reactionAttempt = try await ReactionAttempts.query(on: req.db)
+            .filter(\.$user.$id == user.requireID())
+            .first()
+        
+        let colorMatchAttempt = try await ColorMatchAttempts.query(on: req.db)
+            .filter(\.$user.$id == user.requireID())
+            .first()
+                
+        let attemts: [Any?] = [cardFlipAttempt, reactionAttempt, colorMatchAttempt]
+        
+        let isOnboardingComplete = attemts.reduce(into: false) { result, attempt in
+            result = attempt != nil
+        }
+        
+        user.isOnboardingComplete = isOnboardingComplete
+        try await user.save(on: req.db)
+        
+        return isOnboardingComplete
     }
 
     func submitGameAttempt(req: Request) async throws -> [AchievementWithProgress] {
